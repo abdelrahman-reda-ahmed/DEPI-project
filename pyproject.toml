@@ -28,6 +28,7 @@ Repository = "https://github.com/dora-recon/dora"
 
 [project.scripts]
 dora = "dora.cli:app"
+dora-gui = "dora.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["dora*"]

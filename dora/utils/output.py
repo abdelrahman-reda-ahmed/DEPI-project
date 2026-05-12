@@ -78,34 +78,118 @@ def export_json(result: ScanResult, path: Path):
 
 
 def export_markdown(result: ScanResult, path: Path):
-    lines = [
-        f"# DORA Scan Report: {result.target.raw}",
-        "",
-        f"**Scan Time**: {result.start_time.isoformat()}",
-        f"**Duration**: {(result.end_time - result.start_time).total_seconds():.1f}s" if result.end_time else "",
-        f"**Total Findings**: {len(result.findings)}",
-        "",
-        "## Summary",
-        "",
-        "| Severity | Count |",
-        "|----------|-------|",
-    ]
-    by_sev = result.by_severity()
-    for sev in ["critical", "high", "medium", "low", "info"]:
-        count = len(by_sev.get(sev, []))
-        lines.append(f"| {sev.capitalize()} | {count} |")
+    from datetime import datetime
+    from dora import __version__
 
-    lines.extend(["", "## Findings", ""])
+    start = result.start_time
+    end = result.end_time or datetime.utcnow()
+    duration = (end - start).total_seconds()
+    total = len(result.findings)
+    by_sev = result.by_severity()
+    by_type = result.by_type()
+
+    sev_order = ["critical", "high", "medium", "low", "info"]
+    sev_labels = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW", "info": "INFO"}
+
+    lines: list[str] = []
+    _w = lambda *parts: lines.extend(parts)
+
+    _w(f"# DORA Scan Report — {result.target.raw}")
+    _w("")
+    _w("| Field | Value |")
+    _w("|-------|-------|")
+    _w(f"| **Target** | `{result.target.raw}` |")
+    _w(f"| **Scan Date** | {start.strftime('%Y-%m-%d %H:%M:%S UTC')} |")
+    _w(f"| **Duration** | {duration:.1f}s |")
+    if result.phases_executed:
+        _w(f"| **Phases Executed** | {', '.join(p.capitalize() for p in result.phases_executed)} |")
+    _w(f"| **Total Findings** | {total} |")
+    _w("")
+
+    # ── Executive Summary ───────────────────────────────────────────
+    _w("---")
+    _w("")
+    _w("## Executive Summary")
+    _w("")
+    _w("### Severity Breakdown")
+    _w("")
+    _w("| Severity | Count |")
+    _w("|----------|-------|")
+    for sev in sev_order:
+        count = len(by_sev.get(sev, []))
+        _w(f"| {sev_labels[sev]} | {count} |")
+
+    if by_type:
+        _w("")
+        _w("### Finding Type Breakdown")
+        _w("")
+        _w("| Type | Count |")
+        _w("|------|-------|")
+        for ftype in sorted(by_type, key=lambda t: len(by_type[t]), reverse=True):
+            _w(f"| {ftype} | {len(by_type[ftype])} |")
+
+    if result.target.domain or result.target.ip:
+        _w("")
+        _w("### Target Details")
+        _w("")
+        _w("| Property | Value |")
+        _w("|----------|-------|")
+        if result.target.domain:
+            _w(f"| **Domain** | {result.target.domain} |")
+        if result.target.ip:
+            _w(f"| **IP** | {result.target.ip} |")
+        if result.target.cidr:
+            _w(f"| **CIDR** | {result.target.cidr} |")
+        if result.target.ports:
+            _w(f"| **Open Ports** | {', '.join(str(p) for p in result.target.ports)} |")
+
+    # ── Findings ────────────────────────────────────────────────────
+    _w("")
+    _w("---")
+    _w("")
+    _w("## Findings")
+    _w("")
+    _w(f"*{total} finding(s) listed below, ordered by severity (highest first).*")
+    _w("")
+
+    findings_by_sev: dict[str, list[Finding]] = {}
     for f in result.findings:
-        lines.extend([
-            f"### {f.severity.value.upper()}: {f.name}",
-            f"**Value**: `{f.value}`",
-            f"**Type**: {f.type.value}",
-            f"**Source**: {f.source}",
-            f"**Description**: {f.description}",
-            f"**Evidence**: {f.evidence}" if f.evidence else "",
-            "",
-        ])
+        findings_by_sev.setdefault(f.severity.value, []).append(f)
+
+    any_findings = False
+    for sev in sev_order:
+        items = findings_by_sev.get(sev, [])
+        if not items:
+            continue
+        any_findings = True
+        _w(f"### {sev_labels[sev]}")
+        _w("")
+        for i, f in enumerate(items, 1):
+            _w(f"#### {i}. {f.name}")
+            _w("")
+            _w("| Detail | Value |")
+            _w("|--------|-------|")
+            _w(f"| **Type** | {f.type.value} |")
+            _w(f"| **Value** | `{f.value}` |")
+            _w(f"| **Severity** | {sev_labels.get(f.severity.value, f.severity.value.upper())} |")
+            _w(f"| **Source** | {f.source} |")
+            if f.description:
+                _w(f"| **Description** | {f.description} |")
+            if f.evidence:
+                _w(f"| **Evidence** | {f.evidence} |")
+            if f.extra:
+                for k, v in f.extra.items():
+                    _w(f"| **{k}** | {v} |")
+            _w("")
+
+    if not any_findings:
+        _w("*No findings were discovered during this scan.*")
+        _w("")
+
+    # ── Footer ──────────────────────────────────────────────────────
+    _w("---")
+    _w("")
+    _w(f"*Report generated by DORA v{__version__} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*")
 
     path.write_text("\n".join(lines))
     console.print(f"[green]Markdown report saved: {path}[/]")

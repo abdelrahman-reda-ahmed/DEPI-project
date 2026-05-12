@@ -106,7 +106,23 @@ dora scan example.com --format md
 dora list-phases
 ```
 
-## 5. Output
+## 5. GUI
+
+Launch the hacker-themed desktop GUI:
+
+```bash
+dora-gui
+```
+
+Or directly with Python:
+
+```bash
+python -m dora.gui
+```
+
+The GUI supports target entry, phase selection, output format, threads/timeout config, real-time console output, a sortable findings table, and report generation — all with a dark terminal aesthetic.
+
+## 6. Output
 
 Reports are written to `reports/` by default.
 
