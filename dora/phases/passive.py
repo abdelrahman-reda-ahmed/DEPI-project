@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import re
+from pathlib import Path
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import dns.resolver
@@ -10,6 +12,7 @@ from bs4 import BeautifulSoup
 
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
+from dora.utils.async_runner import run_concurrently
 from dora.utils.http import AsyncHTTPClient
 
 
@@ -200,6 +203,89 @@ async def run_virustotal(client: AsyncHTTPClient, domain: str, api_key: str) -> 
         return []
 
 
+async def _probe_single_subdomain(client: AsyncHTTPClient, subdomain: str) -> tuple[str, int]:
+    for proto in ("https", "http"):
+        url = f"{proto}://{subdomain}"
+        try:
+            result_url, status, _ = await client.probe(url)
+            if status and status > 0:
+                return subdomain, status
+        except Exception:
+            continue
+    return subdomain, 0
+
+
+async def probe_subdomains(subdomains: list[str], config: DORAConfig) -> list[Finding]:
+    findings: list[Finding] = []
+    if not subdomains:
+        return findings
+
+    async with AsyncHTTPClient(config) as client:
+        tasks = [_probe_single_subdomain(client, sd) for sd in subdomains]
+        results = await run_concurrently(tasks, max_concurrent=config.scan_threads, desc="Probing subdomains")
+
+        for subdomain, status in results:
+            if status and status > 0:
+                severity = Severity.INFO
+                if status in (200, 301, 302):
+                    severity = Severity.LOW
+                findings.append(Finding(
+                    type=FindingType.SUBDOMAIN,
+                    name=f"Live Subdomain ({status})",
+                    severity=severity,
+                    value=subdomain,
+                    description=f"Responded with HTTP {status}",
+                    evidence=f"HTTP {status}",
+                    source="subdomain_probe.http_probe",
+                    extra={"status_code": status, "alive": True},
+                ))
+
+    return findings
+
+
+def _load_wordlist(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+
+
+async def run_dns_bruteforce(domain: str, config: DORAConfig) -> list[Finding]:
+    findings: list[Finding] = []
+    wordlist_path = config.wordlist_subdomains
+    prefixes = _load_wordlist(wordlist_path)
+    if not prefixes:
+        return findings
+
+    async def try_prefix(prefix: str) -> Optional[Finding]:
+        fqdn = f"{prefix}.{domain}"
+        try:
+            answers = dns.resolver.resolve(fqdn, "A", lifetime=5)
+            ips = [str(r) for r in answers]
+            return Finding(
+                type=FindingType.SUBDOMAIN,
+                name=f"Subdomain (DNS brute-force)",
+                severity=Severity.INFO,
+                value=fqdn,
+                description=f"Resolved to {', '.join(ips)}",
+                evidence=f"IP: {', '.join(ips[:5])}",
+                source="dns.bruteforce",
+                extra={"ips": ips, "prefix": prefix},
+            )
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.LifetimeTimeout):
+            pass
+        except Exception:
+            pass
+        return None
+
+    tasks = [try_prefix(p) for p in prefixes]
+    results = await run_concurrently(tasks, max_concurrent=config.scan_threads, desc="DNS brute-force", show_progress=False)
+    for r in results:
+        if r:
+            findings.append(r)
+    return findings
+
+
 async def run_passive_phase(
     targets: list[Target],
     config: DORAConfig,
@@ -265,4 +351,12 @@ async def run_passive_phase(
             tech_findings = await run_tech_detect(client, domain)
             results.extend(tech_findings)
 
+            dns_bf = await run_dns_bruteforce(domain, config)
+            results.extend(dns_bf)
+
             findings.extend(results)
+
+        subdomains = list({f.value for f in findings if f.type == FindingType.SUBDOMAIN})
+        if subdomains:
+            probe_findings = await probe_subdomains(subdomains, config)
+            findings.extend(probe_findings)

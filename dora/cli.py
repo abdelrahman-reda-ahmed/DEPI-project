@@ -91,6 +91,8 @@ def scan(
     if verbose:
         cfg._data.setdefault("output", {})["verbose"] = verbose
 
+    cfg.validate()
+
     engine = DORAEngine(cfg)
 
     phase_list = phases or ["all"]
@@ -111,6 +113,7 @@ def quick(
     ),
 ):
     cfg = DORAConfig(config)
+    cfg.validate()
     engine = DORAEngine(cfg)
     asyncio.run(engine.run([target], phases=["all"], no_report=False))
 

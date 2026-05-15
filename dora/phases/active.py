@@ -83,17 +83,6 @@ _KNOWN_SERVICES: dict[int, str] = {
 }
 
 
-async def _probe_http(host: str, port: int) -> Optional[int]:
-    for proto in ("https", "http"):
-        url = f"{proto}://{host}:{port}"
-        try:
-            async with AsyncHTTPClient.__new__(AsyncHTTPClient) as client:
-                pass
-        except Exception:
-            pass
-    return None
-
-
 async def run_port_scan(target: Target, config: DORAConfig) -> list[Finding]:
     findings: list[Finding] = []
     host = target.domain or target.ip
