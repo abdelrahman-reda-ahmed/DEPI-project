@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import socket
 import ssl
 from datetime import datetime, timezone
 from typing import Optional
+
+import httpx
 
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
@@ -177,8 +180,50 @@ async def check_security_headers(client: AsyncHTTPClient, url: str) -> list[Find
     return findings
 
 
-async def run_cve_check(target: Target, findings_so_far: list[Finding]) -> list[Finding]:
+async def _query_nvd(keywords: list[str]) -> list[dict]:
+    query = " ".join(keywords)
+    url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    params = {
+        "keywordSearch": query,
+        "resultsPerPage": 10,
+        "startIndex": 0,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            vulnerabilities = data.get("vulnerabilities", [])
+            results = []
+            for vuln in vulnerabilities:
+                cve_item = vuln.get("cve", {})
+                cve_id = cve_item.get("id", "")
+                descriptions = cve_item.get("descriptions", [])
+                description = ""
+                for d in descriptions:
+                    if d.get("lang") == "en":
+                        description = d.get("value", "")
+                        break
+                metrics = cve_item.get("metrics", {})
+                cvss_v31 = metrics.get("cvssMetricV31", [])
+                base_score = None
+                if cvss_v31:
+                    base_score = cvss_v31[0].get("cvssData", {}).get("baseScore")
+                results.append({
+                    "cve_id": cve_id,
+                    "description": description[:300],
+                    "score": base_score,
+                })
+            return results
+    except Exception:
+        return []
+
+
+async def run_cve_check(target: Target, findings_so_far: list[Finding], config: DORAConfig) -> list[Finding]:
     cve_findings: list[Finding] = []
+
+    seen_cves: set[str] = set()
 
     service_versions: dict[str, str] = {}
     for f in findings_so_far:
@@ -188,14 +233,39 @@ async def run_cve_check(target: Target, findings_so_far: list[Finding]) -> list[
             if banner and svc:
                 service_versions[svc] = banner
 
-    if not service_versions:
-        return cve_findings
-
-    try:
-        async with AsyncHTTPClient.__new__(AsyncHTTPClient) as client:
-            pass
-    except Exception:
-        pass
+    for svc, banner in service_versions.items():
+        keywords = [svc]
+        version_match = re.search(r"(\d+\.\d+(?:\.\d+)?)", banner[:100])
+        if version_match:
+            keywords.append(version_match.group(1))
+        results = await _query_nvd(keywords)
+        for r in results:
+            cve_id = r["cve_id"]
+            if cve_id in seen_cves:
+                continue
+            seen_cves.add(cve_id)
+            score = r.get("score")
+            if score is not None:
+                if score >= 9.0:
+                    severity = Severity.CRITICAL
+                elif score >= 7.0:
+                    severity = Severity.HIGH
+                elif score >= 4.0:
+                    severity = Severity.MEDIUM
+                else:
+                    severity = Severity.LOW
+            else:
+                severity = Severity.MEDIUM
+            cve_findings.append(Finding(
+                type=FindingType.CVE,
+                name=cve_id,
+                severity=severity,
+                value=f"{svc}: {target.raw}",
+                description=r["description"],
+                evidence=f"CVSS: {score}" if score else "No CVSS score",
+                source="nvd.api",
+                extra={"cve_id": cve_id, "cvss_score": score, "service": svc},
+            ))
 
     return cve_findings
 
@@ -229,5 +299,5 @@ async def run_vuln_check_phase(
                     ssl_findings = await check_ssl_tls(host, port)
                     findings.extend(ssl_findings)
 
-            cve_findings = await run_cve_check(target, findings)
+            cve_findings = await run_cve_check(target, findings, config)
             findings.extend(cve_findings)

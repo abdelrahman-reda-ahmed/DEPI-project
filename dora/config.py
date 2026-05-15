@@ -5,8 +5,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from rich.console import Console
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
+
+_console = Console()
 
 
 class DORAConfig:
@@ -118,8 +121,23 @@ class DORAConfig:
         return Path(str(self._get("wordlists", "subdomains", default="wordlists/subdomains.txt")))
 
     @property
+    def wordlist_subdomains_large(self) -> Path:
+        return Path(str(self._get("wordlists", "subdomains_large", default="wordlists/subdomains_deepmagic.txt")))
+
+    @property
     def wordlist_directories(self) -> Path:
         return Path(str(self._get("wordlists", "directories", default="wordlists/directories.txt")))
+
+    @property
+    def wordlist_parameters(self) -> Path:
+        return Path(str(self._get("wordlists", "parameters", default="wordlists/parameters.txt")))
+
+    @property
+    def min_response_size(self) -> int:
+        try:
+            return int(self._get("scan", "min_response_size", default=100))
+        except (ValueError, TypeError):
+            return 100
 
     @property
     def output_format(self) -> str:
@@ -132,3 +150,54 @@ class DORAConfig:
     @property
     def verbose(self) -> bool:
         return bool(self._get("output", "verbose", default=False))
+
+    def validate(self) -> list[str]:
+        warnings: list[str] = []
+
+        wordlist_paths = {
+            "wordlists.subdomains": self.wordlist_subdomains,
+            "wordlists.subdomains_large": self.wordlist_subdomains_large,
+            "wordlists.directories": self.wordlist_directories,
+            "wordlists.parameters": self.wordlist_parameters,
+        }
+        for name, path in wordlist_paths.items():
+            if not path.exists():
+                warnings.append(f"Wordlist not found: {name} → {path}")
+
+        try:
+            ports_str = self.port_scan_ports
+            parts = [p.strip() for p in ports_str.split(",") if p.strip()]
+            for part in parts:
+                if "-" in part:
+                    start, end = part.split("-", 1)
+                    int(start); int(end)
+                else:
+                    int(part)
+        except (ValueError, TypeError):
+            warnings.append(f"Invalid port_scan.ports value: {self.port_scan_ports!r}")
+
+        if self.scan_threads < 1:
+            warnings.append(f"scan.threads should be >= 1 (got {self.scan_threads})")
+        if self.scan_timeout < 1:
+            warnings.append(f"scan.timeout should be >= 1 (got {self.scan_timeout})")
+        if self.rate_limit < 0:
+            warnings.append(f"scan.rate_limit should be >= 0 (got {self.rate_limit})")
+        if self.min_response_size < 0:
+            warnings.append(f"scan.min_response_size should be >= 0 (got {self.min_response_size})")
+
+        api_keys_present = sum(1 for k in ["api_key_securitytrails", "api_key_virustotal",
+                                            "api_key_shodan", "api_key_builtwith", "api_key_github"]
+                               if getattr(self, k, ""))
+        if api_keys_present == 0:
+            warnings.append("No API keys configured — set DORA_* env vars or add to config.yaml")
+
+        valid_formats = {"json", "html", "md", "markdown", "all"}
+        if self.output_format not in valid_formats:
+            warnings.append(f"output.format should be one of {valid_formats} (got {self.output_format!r})")
+
+        if warnings:
+            _console.print("[yellow]Config warnings:[/yellow]")
+            for w in warnings:
+                _console.print(f"  [dim]- {w}[/]")
+
+        return warnings

@@ -35,6 +35,17 @@ PHASE_DEPENDENCIES = {
 }
 
 
+def deduplicate_findings(findings: list[Finding]) -> list[Finding]:
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[Finding] = []
+    for f in findings:
+        key = (f.type.value, f.value, f.name)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(f)
+    return deduped
+
+
 class DORAEngine:
     def __init__(self, config: DORAConfig):
         self.config = config
@@ -92,6 +103,12 @@ class DORAEngine:
             except Exception as e:
                 console.print(f"  [red]X Error in {name}: {e}[/]")
             console.print()
+
+        before = len(findings)
+        findings[:] = deduplicate_findings(findings)
+        after = len(findings)
+        if before != after:
+            console.print(f"  [dim]Deduplicated: {before} → {after} findings[/]")
 
         pips = []
         for target in targets:

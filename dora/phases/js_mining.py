@@ -70,11 +70,12 @@ async def _crawl_js_urls(client: AsyncHTTPClient, url: str, domain: str) -> set[
     return js_urls | sourcemap_urls
 
 
-async def _analyze_js_content(client: AsyncHTTPClient, js_url: str, findings: list[Finding]):
+async def _analyze_js_content(client: AsyncHTTPClient, js_url: str) -> list[Finding]:
+    findings: list[Finding] = []
     try:
         text = await client.fetch_text(js_url)
     except Exception:
-        return
+        return findings
 
     urls = _URL_IN_JS_RE.findall(text)
     for url in urls[:20]:
@@ -114,6 +115,8 @@ async def _analyze_js_content(client: AsyncHTTPClient, js_url: str, findings: li
                 extra={"js_url": js_url, "pattern": pattern},
             ))
 
+    return findings
+
 
 async def run_js_mining_phase(
     targets: list[Target],
@@ -139,9 +142,11 @@ async def run_js_mining_phase(
                     source="js_mining.crawl",
                 ))
 
-            js_tasks = [_analyze_js_content(client, js, findings) for js in js_urls]
+            js_tasks = [_analyze_js_content(client, js) for js in js_urls]
             batch_size = 5
             for i in range(0, len(js_tasks), batch_size):
                 batch = js_tasks[i:i + batch_size]
-                await asyncio.gather(*batch)
+                results = await asyncio.gather(*batch)
+                for r in results:
+                    findings.extend(r)
                 await asyncio.sleep(0.05)

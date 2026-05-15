@@ -1,55 +1,52 @@
 # AGENTS.md
 
-## Project
+## Entrypoints
 
-DORA — a Python CLI tool for automated reconnaissance in pentesting workflows.
+- CLI: `dora.cli:app` (Typer) → `dora scan`, `dora quick`, `dora list-phases`
+- GUI: `dora.gui:main` → `dora-gui` or `python -m dora.gui`
+
+## Dev install
+
+`pip install -e .` — no test/lint/typecheck/CI infrastructure exists.
 
 ## Architecture
 
 ```
 dora/
-├── cli.py           # Typer CLI entry point
-├── engine.py         # Scan orchestrator, phase resolution
-├── config.py         # YAML + env-var config loader
-├── models.py         # Target, Finding, ScanResult dataclasses
-├── targets.py        # Target parsing (domain/IP/CIDR)
+├── cli.py              # Typer entry point
+├── gui.py              # Tkinter GUI (hacker-themed)
+├── engine.py           # DORAEngine — orchestrator, PHASE_MAP, PHASE_DEPENDENCIES
+├── config.py           # DORAConfig — YAML + DORA_* env var overrides
+├── models.py           # Target, Finding, ScanResult dataclasses; Severity/FindingType enums
+├── targets.py          # domain/IP/CIDR parsing
 ├── phases/
-│   ├── passive.py    # Subdomain enum (crt.sh, DNS, tech detect)
-│   ├── active.py     # TCP port scan, banner grab, HTTP probe
-│   ├── fuzzing.py    # Dir/API/param fuzzing with wordlists
-│   ├── js_mining.py  # JS crawl, URL/secret extraction (regex)
-│   ├── vuln_check.py # SSL/TLS, security headers, CORS
-│   └── reporting.py  # JSON/MD/HTML report generation
+│   ├── passive.py      # Subdomain enum (crt.sh, DNS, tech detect)
+│   ├── active.py       # TCP port scan (raw sockets, no nmap), banner grab, HTTP probe
+│   ├── fuzzing.py      # Dir/API/param fuzzing with bundled wordlists
+│   ├── js_mining.py    # JS crawl, URL/secret extraction (regex)
+│   ├── vuln_check.py   # SSL/TLS, security headers, CORS
+│   └── reporting.py    # Report export (synchronous, NOT a scan phase)
 └── utils/
-    ├── http.py       # Async HTTP client wrapper
-    ├── async_runner.py # Semaphore-based concurrent runner
-    └── output.py     # Rich console + report exporters
+    ├── http.py         # AsyncHTTPClient (httpx wrapper)
+    ├── async_runner.py # Semaphore-based concurrent task runner
+    └── output.py       # Rich console + JSON/MD/HTML export
 ```
 
-## Key Commands
+## Phase system
 
-```bash
-pip install .                     # install from source
-dora scan example.com             # full scan
-dora scan example.com -p passive  # single phase
-dora scan example.com --format html
-dora quick example.com            # all phases, default config
-dora list-phases                  # show available phases
-```
+- Register new phases in `engine.py` `PHASE_MAP` dict and optional `PHASE_DEPENDENCIES`.
+- Dependencies auto-resolve: `active→passive`, `fuzzing/js/vuln→active`.
+- Runner signature: `async def run_*_phase(targets: list[Target], config: DORAConfig, findings: list[Finding])`.
+- All phases **append** to the same shared `findings` list — never return their own.
+- CLI aliases (engine resolves them): `subdomain→passive`, `dirs→fuzzing`, `secrets→js`.
+- `dora quick` is a separate CLI command (runs all phases, defaults to HTML output).
+- `reporting.py` lives in `phases/` but is NOT a scan phase — it is synchronous, called by `DORAEngine.run()` after all phases complete.
 
 ## Conventions
 
-- All I/O is async via `asyncio` + `httpx`. Phase runners receive a shared `findings: list[Finding]` that they append to.
-- New phases follow the pattern: `async def run_*_phase(targets, config, findings)` in `phases/`, registered in `PHASE_MAP` in `engine.py`.
-- Findings use `Finding` dataclass from `models.py` with typed `Severity` and `FindingType` enums.
-- Config is loaded from `config.yaml` with `DORA_*` env var overrides. API keys go in config or env vars.
-- Reports default to `reports/` dir. Format: json/html/md.
-
-## API Keys (Optional)
-
-No keys needed for core scans. Optional keys for enriched subdomain data:
-`DORA_SECURITYTRAILS_KEY`, `DORA_VIRUSTOTAL_KEY`, `DORA_SHODAN_KEY`, `DORA_GITHUB_KEY`.
-
-## Dependencies
-
-Python 3.10+, no system deps besides Python. Nmap and Go tools are **not** required — port scanning uses raw sockets, fuzzing uses httpx. Wordlists are bundled.
+- All I/O is async (`asyncio` + `httpx`), except `reporting.py`.
+- Config via `DORAConfig` properties only (never raw dict). Loaded from `config.yaml` or `--config`.
+- API keys optional via `DORA_*` env vars: `SECURITYTRAILS`, `VIRUSTOTAL`, `SHODAN`, `BUILTWITH`, `GITHUB`.
+- Wordlists bundled in `wordlists/`, sourced from SecLists: `subdomains.txt` (5k), `directories.txt` (4.6k), `parameters.txt` (6.4k), plus `subdomains_deepmagic.txt` (50k). Paths configured in `config.yaml`.
+- Reports written to `reports/` (gitignored). Formats: `json`, `html`, `md`, `all`.
+- TCP port scanning uses raw Python sockets — no nmap or other system deps.

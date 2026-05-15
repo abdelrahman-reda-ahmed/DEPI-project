@@ -9,7 +9,7 @@ from dora.models import Finding, FindingType, Severity, Target
 from dora.utils.http import AsyncHTTPClient
 
 
-async def _load_wordlist(path: Path) -> list[str]:
+def _load_wordlist(path: Path) -> list[str]:
     if not path.exists():
         return []
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -22,9 +22,10 @@ async def dir_fuzz_target(
     wordlist_path: Path,
     extensions: list[str] = None,
     max_concurrent: int = 20,
+    min_response_size: int = 100,
 ) -> list[Finding]:
     findings: list[Finding] = []
-    entries = await _load_wordlist(wordlist_path)
+    entries = _load_wordlist(wordlist_path)
     if not entries:
         return findings
 
@@ -38,8 +39,10 @@ async def dir_fuzz_target(
                 try:
                     resp = await client.get(url)
                     status = resp.status_code
+                    content_len = len(resp.content)
+                    if content_len < min_response_size:
+                        return None
                     if status in (200, 201, 204, 301, 302, 307, 308, 401, 403, 500):
-                        content_len = len(resp.content)
                         return Finding(
                             type=FindingType.DIRECTORY,
                             name=f"Directory: {full_path}",
@@ -90,8 +93,6 @@ async def fuzz_api_endpoints(
     async def check_api(path: str) -> Optional[Finding]:
         async with sem:
             url = base_url.rstrip("/") + "/" + path
-            async with AsyncHTTPClient.__new__(AsyncHTTPClient) as c:
-                pass
             try:
                 resp = await client.get(url)
                 status = resp.status_code
@@ -149,7 +150,7 @@ async def fuzz_parameters(
                     if method == "GET":
                         resp = await client.get(url)
                     else:
-                        resp = await client.get(url)
+                        resp = await client.post(url)
                     status = resp.status_code
                     content_len = len(resp.content)
                     if status not in (404, 0) and content_len > 0:
@@ -180,6 +181,28 @@ async def fuzz_parameters(
     return findings
 
 
+async def _fuzz_single_target(
+    client: AsyncHTTPClient,
+    base_url: str,
+    domain: Optional[str],
+    config: DORAConfig,
+    findings: list[Finding],
+):
+    dir_findings = await dir_fuzz_target(
+        client, base_url, config.wordlist_directories,
+        max_concurrent=config.scan_threads,
+        min_response_size=config.min_response_size,
+    )
+    findings.extend(dir_findings)
+
+    if domain:
+        api_findings = await fuzz_api_endpoints(client, base_url, domain)
+        findings.extend(api_findings)
+
+    param_findings = await fuzz_parameters(client, base_url)
+    findings.extend(param_findings)
+
+
 async def run_fuzzing_phase(
     targets: list[Target],
     config: DORAConfig,
@@ -187,17 +210,9 @@ async def run_fuzzing_phase(
 ):
     async with AsyncHTTPClient(config) as client:
         for target in targets:
-            base = target.base_url
+            await _fuzz_single_target(client, target.base_url, target.domain, config, findings)
 
-            dir_findings = await dir_fuzz_target(
-                client, base, config.wordlist_directories,
-                max_concurrent=config.scan_threads,
-            )
-            findings.extend(dir_findings)
-
-            if target.domain:
-                api_findings = await fuzz_api_endpoints(client, base, target.domain)
-                findings.extend(api_findings)
-
-            param_findings = await fuzz_parameters(client, base)
-            findings.extend(param_findings)
+        subdomains = list({f.value for f in findings if f.type == FindingType.SUBDOMAIN})
+        for sub in subdomains:
+            base_url = f"https://{sub}" if not sub.startswith("http") else sub
+            await _fuzz_single_target(client, base_url, sub, config, findings)

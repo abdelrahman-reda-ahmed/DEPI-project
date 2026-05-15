@@ -20,9 +20,10 @@ port_scan:
   timing_template: "T4"     # nmap timing: T0-T5
 
 wordlists:
-  subdomains: "wordlists/subdomains.txt"
-  directories: "wordlists/directories.txt"
-  parameters: "wordlists/parameters.txt"
+  subdomains: "wordlists/subdomains.txt"           # 5,016 entries (SecLists top 5k + original)
+  subdomains_large: "wordlists/subdomains_deepmagic.txt"  # 49,928 entries (deepmagic prefixes)
+  directories: "wordlists/directories.txt"         # 4,649 entries (SecLists common + original)
+  parameters: "wordlists/parameters.txt"           # 6,453 entries (SecLists burp param names)
 
 output:
   format: "json"            # json, html, md
