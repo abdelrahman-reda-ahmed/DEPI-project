@@ -7,6 +7,7 @@ from typing import Optional
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
 from dora.utils.http import AsyncHTTPClient
+from dora.utils.log import logger
 
 
 def _load_wordlist(path: Path) -> list[str]:
@@ -55,8 +56,8 @@ async def dir_fuzz_target(
                             source="fuzzing.directory",
                             extra={"path": full_path, "status": status, "size": content_len},
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Dir fuzz failed for %s: %s", url, e)
         return None
 
     tasks = [check_path(e) for e in entries]
@@ -108,9 +109,10 @@ async def fuzz_api_endpoints(
                         source="fuzzing.api",
                         extra={"path": path, "status": status, "content_type": content_type},
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Dir fuzz failed for %s: %s", url, e)
         return None
+
 
     tasks = [check_api(p) for p in api_paths]
     results = await asyncio.gather(*tasks)
@@ -164,8 +166,8 @@ async def fuzz_parameters(
                             source="fuzzing.parameter",
                             extra={"parameter": param, "method": method, "status": status},
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Param fuzz failed for %s: %s", url, e)
         return None
 
     tasks = [check_param(p) for p in common_params]

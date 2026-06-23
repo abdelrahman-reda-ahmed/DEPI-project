@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
 from dora.utils.http import AsyncHTTPClient
+from dora.utils.log import logger
 
 
 _JS_URL_RE = re.compile(r'src=["\']([^"\']+\.js[^"\']*)["\']', re.I)
@@ -53,8 +54,8 @@ async def _crawl_js_urls(client: AsyncHTTPClient, url: str, domain: str) -> set[
             src = match.group(1)
             full = urljoin(url, src)
             js_urls.add(full)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("JS crawl failed for %s: %s", url, e)
 
     sourcemap_urls: set[str] = set()
     for js in js_urls:
@@ -64,8 +65,8 @@ async def _crawl_js_urls(client: AsyncHTTPClient, url: str, domain: str) -> set[
             if sourcemap_match:
                 sm = urljoin(js, sourcemap_match.group(1))
                 sourcemap_urls.add(sm)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Sourcemap fetch failed for %s: %s", js, e)
 
     return js_urls | sourcemap_urls
 
@@ -74,7 +75,8 @@ async def _analyze_js_content(client: AsyncHTTPClient, js_url: str) -> list[Find
     findings: list[Finding] = []
     try:
         text = await client.fetch_text(js_url)
-    except Exception:
+    except Exception as e:
+        logger.debug("JS content fetch failed for %s: %s", js_url, e)
         return findings
 
     urls = _URL_IN_JS_RE.findall(text)

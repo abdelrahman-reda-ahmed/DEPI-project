@@ -12,9 +12,6 @@ from dora.utils.output import (
     export_json,
     export_markdown,
     print_findings_table,
-    print_summary,
-    print_finding,
-    print_findings_table as print_findings_table2,
 )
 
 
@@ -42,8 +39,6 @@ def generate_report(
             export_markdown(result, out_dir / f"{base_name}.md")
         if fmt == "html" or fmt == "all":
             export_html(result, out_dir / f"{base_name}.html")
-
-    print_summary(result)
 
     by_severity = result.by_severity()
     for sev in ["critical", "high", "medium"]:

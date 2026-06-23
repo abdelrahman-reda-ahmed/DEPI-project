@@ -12,8 +12,9 @@ scan:
   threads: 20
   timeout: 10
   retries: 2
-  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DORA/0.1"
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DORA/0.2"
   rate_limit: 0.1           # delay between requests (seconds)
+  phase_timeout: 0          # max seconds per phase (0 = no limit)
 
 port_scan:
   ports: "21,22,23,25,53,80,110,143,443,445,993,995,1433,1521,2049,3306,3389,5432,5900,6379,8080,8443,9000,27017"

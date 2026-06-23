@@ -75,6 +75,10 @@ def scan(
         False, "--no-report",
         help="Skip report generation",
     ),
+    max_time: int = typer.Option(
+        0, "--max-time", "-T",
+        help="Maximum time per phase in seconds (0 = no limit)",
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v",
         help="Verbose output",
@@ -88,6 +92,8 @@ def scan(
         cfg._data.setdefault("scan", {})["threads"] = threads
     if timeout:
         cfg._data.setdefault("scan", {})["timeout"] = timeout
+    if max_time:
+        cfg._data.setdefault("scan", {})["phase_timeout"] = max_time
     if verbose:
         cfg._data.setdefault("output", {})["verbose"] = verbose
 
@@ -111,8 +117,14 @@ def quick(
         exists=True,
         dir_okay=False,
     ),
+    max_time: int = typer.Option(
+        0, "--max-time", "-T",
+        help="Maximum time per phase in seconds (0 = no limit)",
+    ),
 ):
     cfg = DORAConfig(config)
+    if max_time:
+        cfg._data.setdefault("scan", {})["phase_timeout"] = max_time
     cfg.validate()
     engine = DORAEngine(cfg)
     asyncio.run(engine.run([target], phases=["all"], no_report=False))

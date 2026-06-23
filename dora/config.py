@@ -89,6 +89,13 @@ class DORAConfig:
             return 10
 
     @property
+    def phase_timeout(self) -> int:
+        try:
+            return int(self._get("scan", "phase_timeout", default=0))
+        except (ValueError, TypeError):
+            return 0
+
+    @property
     def scan_retries(self) -> int:
         try:
             return int(self._get("scan", "retries", default=2))

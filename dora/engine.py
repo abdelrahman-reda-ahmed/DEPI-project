@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Optional
 
 from rich.console import Console
 
+from dora import __version__
 from dora.config import DORAConfig
 from dora.models import Finding, ScanResult, Target
 from dora.targets import parse_targets
@@ -14,6 +16,8 @@ from dora.phases.fuzzing import run_fuzzing_phase
 from dora.phases.js_mining import run_js_mining_phase
 from dora.phases.vuln_check import run_vuln_check_phase
 from dora.phases.reporting import generate_report
+from dora.utils.output import print_summary
+from dora.utils.log import logger
 
 console = Console()
 
@@ -83,8 +87,9 @@ class DORAEngine:
     ) -> list[ScanResult]:
         targets = parse_targets(targets_raw)
         resolved = self.resolve_phases(phases)
+        phase_timeout = self.config.phase_timeout
 
-        console.print(f"[bold cyan]DORA[/] [white]v0.1.0 - Reconnaissance Engine[/]")
+        console.print(f"[bold cyan]DORA[/] [white]v{__version__} - Reconnaissance Engine[/]")
         console.print(f"[dim]Targets:[/] {', '.join(t.raw for t in targets)}")
         console.print(f"[dim]Phases:[/] {', '.join(resolved)}")
         console.print()
@@ -97,11 +102,21 @@ class DORAEngine:
             name, runner = PHASE_MAP[phase_key]
             console.print(f"[bold]>> Phase:[/] {name}")
             try:
-                await runner(targets, self.config, findings)
+                if phase_timeout > 0:
+                    await asyncio.wait_for(
+                        runner(targets, self.config, findings),
+                        timeout=phase_timeout,
+                    )
+                else:
+                    await runner(targets, self.config, findings)
                 n = len(findings)
                 console.print(f"  [green]OK ({n} total findings)[/]")
+            except asyncio.TimeoutError:
+                console.print(f"  [red]X Phase timed out after {phase_timeout}s[/]")
+                logger.warning("Phase %s timed out after %ss", name, phase_timeout)
             except Exception as e:
                 console.print(f"  [red]X Error in {name}: {e}[/]")
+                logger.error("Error in phase %s: %s", name, e, exc_info=True)
             console.print()
 
         before = len(findings)
@@ -119,5 +134,7 @@ class DORAEngine:
                 generate_report(result, self.config)
 
             pips.append(result)
+
+        print_summary(pips[0]) if pips else None
 
         return pips

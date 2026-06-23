@@ -13,6 +13,7 @@ import httpx
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
 from dora.utils.http import AsyncHTTPClient
+from dora.utils.log import logger
 
 
 async def check_ssl_tls(host: str, port: int = 443) -> list[Finding]:
@@ -94,8 +95,8 @@ async def check_ssl_tls(host: str, port: int = 443) -> list[Finding]:
             description=str(e),
             source="ssl.check",
         ))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("SSL/TLS check failed for %s: %s", host, e)
 
     return findings
 
@@ -174,8 +175,8 @@ async def check_security_headers(client: AsyncHTTPClient, url: str) -> list[Find
                 source="security_headers.cors",
             ))
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Security headers check failed for %s: %s", url, e)
 
     return findings
 
@@ -216,7 +217,8 @@ async def _query_nvd(keywords: list[str]) -> list[dict]:
                     "score": base_score,
                 })
             return results
-    except Exception:
+    except Exception as e:
+        logger.debug("NVD query failed for keywords %s: %s", keywords, e)
         return []
 
 
