@@ -7,6 +7,7 @@ from typing import Optional
 from dora.config import DORAConfig
 from dora.models import Finding, FindingType, Severity, Target
 from dora.utils.http import AsyncHTTPClient
+from dora.utils.log import logger
 
 
 def _parse_ports(port_str: str) -> list[int]:
@@ -27,7 +28,7 @@ def _parse_ports(port_str: str) -> list[int]:
     return ports
 
 
-async def _tcp_scan(target_host: str, port: int, timeout: float = 3.0) -> Optional[int]:
+def _tcp_scan_sync(target_host: str, port: int, timeout: float = 3.0) -> Optional[int]:
     try:
         _, _, ips = socket.gethostbyname_ex(target_host)
         ip = ips[0]
@@ -44,12 +45,16 @@ async def _tcp_scan(target_host: str, port: int, timeout: float = 3.0) -> Option
         sock.close()
         if result == 0:
             return port
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("TCP scan %s:%d failed: %s", target_host, port, e)
     return None
 
 
-async def _banner_grab(host: str, port: int, timeout: float = 5.0) -> Optional[str]:
+async def _tcp_scan(target_host: str, port: int, timeout: float = 3.0) -> Optional[int]:
+    return await asyncio.to_thread(_tcp_scan_sync, target_host, port, timeout)
+
+
+def _banner_grab_sync(host: str, port: int, timeout: float = 5.0) -> Optional[str]:
     try:
         _, _, ips = socket.gethostbyname_ex(host)
         ip = ips[0]
@@ -68,8 +73,13 @@ async def _banner_grab(host: str, port: int, timeout: float = 5.0) -> Optional[s
         banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
         sock.close()
         return banner if banner else None
-    except Exception:
-        return None
+    except Exception as e:
+        logger.debug("Banner grab %s:%d failed: %s", host, port, e)
+    return None
+
+
+async def _banner_grab(host: str, port: int, timeout: float = 5.0) -> Optional[str]:
+    return await asyncio.to_thread(_banner_grab_sync, host, port, timeout)
 
 
 _KNOWN_SERVICES: dict[int, str] = {
@@ -155,15 +165,15 @@ async def run_http_probe(target: Target, config: DORAConfig) -> list[Finding]:
                     if status and status > 0:
                         server = headers.get("server", headers.get("Server", "Unknown"))
                         title = ""
-                        try:
-                            text = await client.fetch_text(url)
-                            from bs4 import BeautifulSoup
-                            soup = BeautifulSoup(text, "lxml")
-                            t = soup.find("title")
-                            if t:
-                                title = t.text.strip()[:100]
-                        except Exception:
-                            pass
+                    try:
+                        text = await client.fetch_text(url)
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(text, "lxml")
+                        t = soup.find("title")
+                        if t:
+                            title = t.text.strip()[:100]
+                    except Exception as e:
+                        logger.debug("Title fetch failed for %s: %s", url, e)
 
                         findings.append(Finding(
                             type=FindingType.OPEN_PORT,
@@ -177,7 +187,8 @@ async def run_http_probe(target: Target, config: DORAConfig) -> list[Finding]:
                             extra={"url": url, "status": status, "server": server},
                         ))
                         break
-                except Exception:
+                except Exception as e:
+                    logger.debug("HTTP probe failed for %s: %s", url, e)
                     continue
 
     return findings

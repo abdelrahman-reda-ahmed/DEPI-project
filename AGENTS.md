@@ -44,9 +44,12 @@ dora/
 
 ## Conventions
 
-- All I/O is async (`asyncio` + `httpx`), except `reporting.py`.
+- All I/O is async (`asyncio` + `httpx`), except `reporting.py`. DNS lookups and TCP socket ops use `asyncio.to_thread()` to avoid blocking the event loop.
 - Config via `DORAConfig` properties only (never raw dict). Loaded from `config.yaml` or `--config`.
 - API keys optional via `DORA_*` env vars: `SECURITYTRAILS`, `VIRUSTOTAL`, `SHODAN`, `BUILTWITH`, `GITHUB`.
 - Wordlists bundled in `wordlists/`, sourced from SecLists: `subdomains.txt` (5k), `directories.txt` (4.6k), `parameters.txt` (6.4k), plus `subdomains_deepmagic.txt` (50k). Paths configured in `config.yaml`.
 - Reports written to `reports/` (gitignored). Formats: `json`, `html`, `md`, `all`.
-- TCP port scanning uses raw Python sockets — no nmap or other system deps.
+- TCP port scanning uses raw Python sockets via threads — no nmap or other system deps.
+- Rate limiting controlled by `scan.rate_limit` in config (seconds between API calls).
+- Phase timeout can be set via `scan.phase_timeout` or CLI flag `--max-time`/`-T` (seconds, 0 = no limit).
+- Errors are logged to `logs/dora.log` (file only, never stdout). All `except` blocks log to debug level.
