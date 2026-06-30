@@ -198,7 +198,7 @@ class DORAConfig:
         if api_keys_present == 0:
             warnings.append("No API keys configured — set DORA_* env vars or add to config.yaml")
 
-        valid_formats = {"json", "html", "md", "markdown", "all"}
+        valid_formats = {"json", "md", "markdown", "all"}
         if self.output_format not in valid_formats:
             warnings.append(f"output.format should be one of {valid_formats} (got {self.output_format!r})")
 

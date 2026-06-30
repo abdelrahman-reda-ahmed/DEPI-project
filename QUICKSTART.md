@@ -124,13 +124,18 @@ The GUI supports target entry, phase selection, output format, threads/timeout c
 
 ## 6. Output
 
-Reports are written to `reports/` by default.
+Reports are written to `reports/` by default. Findings are also exported by category into individual `.txt` files inside a `_raw` subdirectory:
 
 ```
 reports/
 ├── example_com_20260512_123456.json
-├── example_com_20260512_123456.html
-└── example_com_20260512_123456.md
+├── example_com_20260512_123456.md
+├── example_com_20260512_123456_raw/
+│   ├── subdomain.txt
+│   ├── dns_record.txt
+│   ├── open_port.txt
+│   ├── cve.txt
+│   └── ...
 ```
 
 ## Full Workflow Example

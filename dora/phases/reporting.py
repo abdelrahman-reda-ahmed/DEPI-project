@@ -8,9 +8,9 @@ from dora.config import DORAConfig
 from dora.models import ScanResult
 from dora.utils.output import (
     console,
-    export_html,
     export_json,
     export_markdown,
+    export_raw_findings_by_type,
     print_findings_table,
 )
 
@@ -30,15 +30,14 @@ def generate_report(
     timestamp = result.start_time.strftime("%Y%m%d_%H%M%S")
     base_name = f"{safe_name}_{timestamp}"
 
+    raw_dir = out_dir / f"{base_name}_raw"
+    export_raw_findings_by_type(result, raw_dir)
+
     if output_path:
         _save_report(result, output_path, fmt)
     else:
-        if fmt == "json" or fmt == "all":
-            export_json(result, out_dir / f"{base_name}.json")
-        if fmt == "md" or fmt == "markdown" or fmt == "all":
-            export_markdown(result, out_dir / f"{base_name}.md")
-        if fmt == "html" or fmt == "all":
-            export_html(result, out_dir / f"{base_name}.html")
+        export_json(result, out_dir / f"{base_name}.json")
+        export_markdown(result, out_dir / f"{base_name}.md")
 
     by_severity = result.by_severity()
     for sev in ["critical", "high", "medium"]:
@@ -55,7 +54,5 @@ def _save_report(result: ScanResult, path: Path, fmt: str):
         export_json(result, path)
     elif ext in (".md", ".markdown") or fmt in ("md", "markdown"):
         export_markdown(result, path)
-    elif ext == ".html" or fmt == "html":
-        export_html(result, path)
     else:
         export_json(result, path)

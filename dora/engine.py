@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from datetime import datetime
 from typing import Optional
 
@@ -94,6 +95,7 @@ class DORAEngine:
         console.print(f"[dim]Phases:[/] {', '.join(resolved)}")
         console.print()
 
+        warnings.filterwarnings("ignore", message="coroutine '.*' was never awaited")
         findings: list[Finding] = []
 
         for phase_key in resolved:

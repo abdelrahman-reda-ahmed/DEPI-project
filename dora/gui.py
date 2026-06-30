@@ -18,7 +18,7 @@ from dora import __version__
 from dora.config import DORAConfig
 from dora.engine import DORAEngine, PHASE_MAP, deduplicate_findings
 from dora.models import Finding, ScanResult, Severity
-from dora.utils.output import export_markdown, export_json, export_html
+from dora.utils.output import export_markdown, export_json
 
 BG_ROOT = "#1e1e2e"
 BG_PANEL = "#181825"

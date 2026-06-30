@@ -9,6 +9,7 @@ DORA is a modular, async-first reconnaissance tool that automates the pentesting
 - **Async-first** — asyncio + semaphore-based concurrency for speed
 - **CLI + GUI** — terminal-first with a hacker-themed desktop GUI
 - **Auto-saving** — every scan automatically saves a well-structured Markdown report
+- **Raw category exports** — findings grouped by type into individual `.txt` files (subdomains, ports, CVEs, etc.)
 - **Rich output** — colored terminal output, HTML/JSON/Markdown reports
 - **API-key optional** — core scans work out of the box with no keys
 
@@ -343,6 +344,34 @@ dora scan example.com --format md      # -> reports/example_com_*.md
 dora scan example.com --format html    # -> reports/example_com_*.html
 dora scan example.com --format all     # -> all three formats
 ```
+
+### Raw Category Exports
+
+Alongside the standard reports, findings are automatically grouped by type into individual `.txt` files inside a `_raw` subdirectory:
+
+```
+reports/
+├── example_com_20260512_143001/
+│   ├── example_com_20260512_143001.json
+│   ├── example_com_20260512_143001.md
+│   └── example_com_20260512_143001_raw/
+│       ├── subdomain.txt
+│       ├── dns_record.txt
+│       ├── open_port.txt
+│       ├── directory.txt
+│       ├── api_endpoint.txt
+│       ├── parameter.txt
+│       ├── js_endpoint.txt
+│       ├── secret.txt
+│       ├── cve.txt
+│       ├── ssl_issue.txt
+│       ├── missing_header.txt
+│       ├── cors_issue.txt
+│       ├── tech_stack.txt
+│       └── osint.txt
+```
+
+Each raw file lists findings with value, severity, source, description, evidence, and extra fields in a clean numbered format — useful for piping into other tools or quick inspection.
 
 ### Directory Structure
 

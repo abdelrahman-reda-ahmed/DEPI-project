@@ -57,11 +57,11 @@ def scan(
     ),
     output: Optional[str] = typer.Option(
         None, "--output", "-o",
-        help="Output file path (ext determines format: .json, .html, .md)",
+        help="Output file path (ext determines format: .json, .md)",
     ),
     output_format: str = typer.Option(
-        "html", "--format", "-f",
-        help="Output format: json, html, md, all",
+        "json", "--format", "-f",
+        help="Output format: json, md, all",
     ),
     threads: int = typer.Option(
         20, "--threads", "-t",

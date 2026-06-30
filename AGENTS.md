@@ -29,7 +29,8 @@ dora/
 └── utils/
     ├── http.py         # AsyncHTTPClient (httpx wrapper)
     ├── async_runner.py # Semaphore-based concurrent task runner
-    └── output.py       # Rich console + JSON/MD/HTML export
+    ├── output.py       # Rich console + JSON/MD/HTML export
+    └── log.py          # Structured logging to logs/dora.log
 ```
 
 ## Phase system
@@ -49,7 +50,18 @@ dora/
 - API keys optional via `DORA_*` env vars: `SECURITYTRAILS`, `VIRUSTOTAL`, `SHODAN`, `BUILTWITH`, `GITHUB`.
 - Wordlists bundled in `wordlists/`, sourced from SecLists: `subdomains.txt` (5k), `directories.txt` (4.6k), `parameters.txt` (6.4k), plus `subdomains_deepmagic.txt` (50k). Paths configured in `config.yaml`.
 - Reports written to `reports/` (gitignored). Formats: `json`, `html`, `md`, `all`.
+- Findings auto-exported by category into `<report>_raw/*.txt` files (one per `FindingType`).
 - TCP port scanning uses raw Python sockets via threads — no nmap or other system deps.
 - Rate limiting controlled by `scan.rate_limit` in config (seconds between API calls).
 - Phase timeout can be set via `scan.phase_timeout` or CLI flag `--max-time`/`-T` (seconds, 0 = no limit).
 - Errors are logged to `logs/dora.log` (file only, never stdout). All `except` blocks log to debug level.
+
+## v0.2.0 changes
+
+- **Async DNS**: `dns.resolver` calls in `passive.py` moved to `asyncio.to_thread()` — no longer block the event loop.
+- **Threaded port scan**: Socket operations in `active.py` run via `asyncio.to_thread()` — prevents event loop blocking during TCP connects.
+- **Phase timeout**: New `scan.phase_timeout` config option + `--max-time`/`-T` CLI flag. Wraps each phase in `asyncio.wait_for()`. Default `0` = no limit.
+- **Structured logging**: Added `dora/utils/log.py`. All `except: pass` replaced with `logger.debug(...)`. Logs written to `logs/dora.log` (file only).
+- **Rate limiting**: `await asyncio.sleep(config.rate_limit)` between API calls in passive phase.
+- **Terminal summary**: `print_summary()` called at end of `engine.run()` so CLI always shows results summary.
+- **Warning suppression**: `RuntimeWarning` for cancelled coroutines on timeout suppressed in engine.
