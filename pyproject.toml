@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dora-pentest"
-version = "0.2.0"
+version = "0.3.0"
 description = "Automated reconnaissance and pentesting assistant"
 readme = "README.md"
 license = { text = "MIT" }
@@ -14,7 +14,6 @@ dependencies = [
     "httpx>=0.25.0",
     "rich>=13.0.0",
     "pyyaml>=6.0",
-    "jinja2>=3.1.0",
     "pydantic>=2.0.0",
     "dnspython>=2.4.0",
     "beautifulsoup4>=4.12.0",

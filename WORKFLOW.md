@@ -143,11 +143,14 @@ findings[:] = deduplicate_findings(findings)
 ```
 generate_report(result, config)
  │
- ├── export_json()      ────► reports/<target>_<timestamp>.json
- ├── export_markdown()  ────► reports/<target>_<timestamp>.md
- ├── export_html()      ────► reports/<target>_<timestamp>.html
+ ├── export_raw_findings_by_type()  ────► reports/<target>_<ts>_raw/*.txt
+ │   └── one file per FindingType (subdomain, open_port, cve, etc.)
  │
- └── print_summary()    ────► terminal output
+ ├── export_json()                  ────► reports/<target>_<timestamp>.json
+ ├── export_markdown()              ────► reports/<target>_<timestamp>.md
+ ├── export_html()                  ────► reports/<target>_<timestamp>.html
+ │
+ └── print_summary()                ────► terminal output
 ```
 
 ---

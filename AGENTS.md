@@ -50,6 +50,7 @@ dora/
 - API keys optional via `DORA_*` env vars: `SECURITYTRAILS`, `VIRUSTOTAL`, `SHODAN`, `BUILTWITH`, `GITHUB`.
 - Wordlists bundled in `wordlists/`, sourced from SecLists: `subdomains.txt` (5k), `directories.txt` (4.6k), `parameters.txt` (6.4k), plus `subdomains_deepmagic.txt` (50k). Paths configured in `config.yaml`.
 - Reports written to `reports/` (gitignored). Formats: `json`, `html`, `md`, `all`.
+- Findings auto-exported by category into `<report>_raw/*.txt` files (one per `FindingType`).
 - TCP port scanning uses raw Python sockets via threads — no nmap or other system deps.
 - Rate limiting controlled by `scan.rate_limit` in config (seconds between API calls).
 - Phase timeout can be set via `scan.phase_timeout` or CLI flag `--max-time`/`-T` (seconds, 0 = no limit).
